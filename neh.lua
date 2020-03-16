@@ -20,8 +20,9 @@ local read, write = pipe()
 local output_read, output_write = pipe()
 
 function writeData()
-    unistd.close(read)
-    unistd.write(write, 'Hello?')
+    if data ~= nil then
+        unistd.write(write, data)
+    end
     unistd.close(write)
 end
 
@@ -47,22 +48,20 @@ function runProgram()
     unistd.exec(ngx.var.execute_file , {})
     posix.wait(child)
 
-    posix._exit(1)
+    posix._exit(0)
 end
 
 function output()
     local buffer = '' 
-    -- FIXME: Change this to a streaming implementation.
+    -- TODO: Change this to a streaming implementation.
     --        Take a look at https://github.com/openresty/lua-nginx-module#lua_http10_buffering
     unistd.close(output_write)
 
     while(true) do
-        print('loop', posix.errno())
-        local out, err = unistd.read(output_read, 1)
-        print(out:len(), err)
+        local out, err = unistd.read(output_read, 1024)
         if err ~= nil then break end
         buffer = buffer .. out
-        if out == nil or out:len() < 1 then break end
+        if out == nil or out:len() < 1024 then break end
     end
 
     unistd.close(output_read)
