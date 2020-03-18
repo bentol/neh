@@ -45,14 +45,17 @@ cat <<EOF > ./script.sh
 echo Hello world!
 EOF
 chmod +x ./script.sh
+
 ```
 
+Quickly reload your nginx config and checking if its correct `sudo nginx -t && sudo systemctl reload nginx`
 Now if you go to http://example.com/hooks/test you will see: `Hello world!`.  
 Congratz! You just set up your first Neh!
 
 Just make sure that `www-data` or whatever user is running your nginx instance can access the script!
 
 [TODO]: # (Add a section with more examples)
+[TODO]: # (Add a section about debugging)
 
 ## Installing
 You can install it through this simple oneliner:
