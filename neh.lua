@@ -62,8 +62,13 @@ function writeBodyToProgram()
     ngx.req.read_body()
     local data = ngx.req.get_body_data()
 
+    -- FIXME: writing to stdin doesn't seem to go too well
     if data ~= nil then
+        print('wrote data ' .. tostring(data))
         unistd.write(write, data)
+    else
+        print('wrote bogus')
+        unistd.write(write, 0x04)
     end
 end
 
@@ -126,6 +131,7 @@ function awaitOutput(run_child)
                 socket, err = ngx.req.socket(true)
             end
 
+            -- TODO: Check if this is faster with ngx.print
             socket:send(string.format("%x", out:len()) .. '\r\n' .. out .. '\r\n')
         else
             ngx.sleep(.1)
@@ -136,7 +142,6 @@ function awaitOutput(run_child)
         end
     end
 end
-
 
 local write_child = unistd.fork()
 if write_child == 0 then
