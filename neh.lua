@@ -91,16 +91,12 @@ function writeBodyToProgram(write)
         local file = posix.open(filename, bitoper(0, posix.O_RDONLY, OR))
         local byte = nil
         local buffer_size = 1024 * 10
-        local size = unistd.lseek(file, 0, unistd.SEEK_END)
 
         unistd.lseek(file, 0, unistd.SEEK_SET)
-
-        local total = 0
 
         while(true) do
             ngx.sleep(.01)
             byte = unistd.read(file, buffer_size)
-            total = total + byte:len()
             if byte == nil then break end
             unistd.write(write, byte) 
             if byte:len() < buffer_size then break end
@@ -112,11 +108,12 @@ function writeBodyToProgram(write)
     end
 end
 
-function runProgram(read, program_write, header_write)
+function runProgram(read, program_write, header_write, command_write)
     unistd.dup2(read, posix.STDIN_FILENO)
     unistd.dup2(program_write, posix.STDOUT_FILENO)
     unistd.dup2(program_write, posix.STDERR_FILENO)
     unistd.dup2(header_write, 4)
+    unistd.dup2(command_write, 5)
 
     local request_headers, err = ngx.req.get_headers()
 
@@ -155,8 +152,9 @@ function awaitHeaders(header_read)
     end
 end
 
-function awaitOutput(run_child, program_read)
+function awaitOutput(run_child, program_read, command_read)
     posix.fcntl(program_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
+    posix.fcntl(command_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
 
     ngx.header['Server'] = 'Neh alphav1'
     ngx.header['Content-Type'] = 'text/plain'
@@ -165,6 +163,20 @@ function awaitOutput(run_child, program_read)
         ngx.sleep(.01)
         local pid, wait_err = wait.wait(run_child, bitoper(0, wait.WNOHANG, OR))
         local out, read_err = unistd.read(program_read, 1024)
+        local command, command_err = unistd.read(command_read, 1)
+
+        if command ~= nil then
+            local command_buffer = command
+            while(true) do
+                local command, command_err = unistd.read(command_read, 1)
+                if command:byte() == 10 or command == nil then break end
+                command_buffer = command_buffer .. command
+            end
+
+            if command_buffer:upper() == 'END_REQUEST' then
+                    socket:send('0\r\n\r\n')
+            end
+        end
 
         if out ~= nil then
             if socket == nil then
@@ -205,20 +217,21 @@ local socket
 local read, write = posix.pipe()
 local program_read, program_write = posix.pipe()
 local header_read, header_write = posix.pipe()
+local command_read, command_write = posix.pipe()
 
 local output_child = unistd.fork()
 if output_child == 0 then
     local write_child = unistd.fork()
     if write_child == 0 then
         writeBodyToProgram(write)
-        closePipes({read, write, program_read, program_write, header_read, header_write})
+        closePipes({read, write, program_read, program_write, header_read, header_write, command_read, command_write})
         posix._exit(0)
     end
 
     local run_child = unistd.fork()
     if run_child == 0 then
-        closePipes({write, program_read, header_read })
-        runProgram(read, program_write, header_write)
+        closePipes({write, program_read, header_read, command_read })
+        runProgram(read, program_write, header_write, command_write)
     end
 
     neh:set(tostring(ngx.start_time) .. '-' .. 'run_child', run_child)
@@ -229,13 +242,13 @@ if output_child == 0 then
 
     wait.wait(write_child)
 
-    local output_thread = ngx.thread.spawn(awaitOutput, run_child, program_read)
+    local output_thread = ngx.thread.spawn(awaitOutput, run_child, program_read, command_read)
     ngx.thread.wait(output_thread)
-    closePipes({read, write, program_read, program_write, header_read, header_write})
+    closePipes({read, write, program_read, program_write, header_read, header_write, command_read, command_write})
     posix._exit(0)
 end
 
-closePipes({read, write, program_read, program_write, header_read, header_write})
+closePipes({read, write, program_read, program_write, header_read, header_write, command_read, command_write})
 
 while (true) do
     local _, err = wait.wait(output_child)
