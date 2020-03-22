@@ -112,13 +112,13 @@ function runProgram(read, program_write, header_write, command_write)
     unistd.dup2(read, posix.STDIN_FILENO)
     unistd.dup2(program_write, posix.STDOUT_FILENO)
     unistd.dup2(program_write, posix.STDERR_FILENO)
-    unistd.dup2(header_write, 4)
-    unistd.dup2(command_write, 5)
+    unistd.dup2(header_write, 3)
+    unistd.dup2(command_write, 4)
 
     local request_headers, err = ngx.req.get_headers()
 
     for key, value in pairs(request_headers) do
-        stdlib.setenv(string.upper(key), value)
+        stdlib.setenv(string.gsub(key:upper(), '-', '_'), value)
     end
 
     stdlib.setenv('URL', ngx.var.request_uri)
@@ -153,37 +153,26 @@ function awaitHeaders(header_read)
 end
 
 function awaitOutput(run_child, program_read, command_read)
-    posix.fcntl(program_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
     posix.fcntl(command_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
+    posix.fcntl(program_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
 
     ngx.header['Server'] = 'Neh alphav1'
     ngx.header['Content-Type'] = 'text/plain'
 
-    while(true) do
-        ngx.sleep(.01)
-        local pid, wait_err = wait.wait(run_child, bitoper(0, wait.WNOHANG, OR))
-        local out, read_err = unistd.read(program_read, 1024)
-        local command, command_err = unistd.read(command_read, 1)
+    local socket
+    local doing_output = true
 
-        if command ~= nil then
-            local command_buffer = command
-            while(true) do
-                local command, command_err = unistd.read(command_read, 1)
-                if command:byte() == 10 or command == nil then break end
-                command_buffer = command_buffer .. command
-            end
-
-            if command_buffer:upper() == 'END_REQUEST' then
-                    socket:send('0\r\n\r\n')
-            end
-        end
+    while(doing_output) do
+        local out = unistd.read(program_read, 1024)
+        local incoming_command = unistd.read(command_read, 1)
 
         if out ~= nil then
             if socket == nil then
                 ngx.send_headers()
                 ngx.flush(true)
-    
+
                 socket, err = ngx.req.socket(true)
+                print(err)
 
                 if socket == nil then
                     ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -193,17 +182,36 @@ function awaitOutput(run_child, program_read, command_read)
             -- TODO: Check if this is faster with ngx.print
             local bytes, err = socket:send(string.format('%x', out:len()) .. '\r\n' .. out .. '\r\n')
 
-            if err == 'closed' then
-                break
+            if err == 'closed' or err == 'broken pipe' then break end -- If the tcp socket is closed, break output
+        end
+
+        if incoming_command ~= nil then
+            local commands = {}
+            local command = incoming_command
+            while(true) do
+                ::continue_command_read::
+
+                local char = unistd.read(command_read, 1)
+
+                if char == nil then break end
+                if char:byte() == 10 then
+                    table.insert(commands, command)
+                    command = ''
+                    goto continue_command_read
+                end
+
+                command = command .. char
             end
-        else
-            if wait_err == 'No child processes' then
-                if socket ~= nil then
+
+            for _, command in ipairs(commands) do
+                if command == 'END_REQUEST' then
+                    doing_output = false
                     socket:send('0\r\n\r\n')
                 end
-                break
             end
         end
+
+        ngx.sleep(.01)
     end
 end
 
@@ -244,7 +252,9 @@ if output_child == 0 then
 
     local output_thread = ngx.thread.spawn(awaitOutput, run_child, program_read, command_read)
     ngx.thread.wait(output_thread)
+
     closePipes({read, write, program_read, program_write, header_read, header_write, command_read, command_write})
+
     posix._exit(0)
 end
 
@@ -254,5 +264,6 @@ while (true) do
     local _, err = wait.wait(output_child)
     if err == 'No child processes' then break end
 end
+
 neh:delete(tostring(ngx.start_time) .. '-' .. 'run_child')
 neh:delete(tostring(ngx.start_time) .. '-' .. 'output_child')
