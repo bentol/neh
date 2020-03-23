@@ -21,6 +21,8 @@ And all of that with just two lines in your config!
 
 [Check out my blog post for more information!](https://bram.dingelstad.xyz/blog/introducing-neh)
 
+_Keep in mind that Neh is in alpha and **should not be run in production**_
+
 ## Getting started
 
 Make sure your location directive of choice looks like this:
