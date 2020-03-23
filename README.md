@@ -82,12 +82,12 @@ curl https://example.com/your/endpoint --data-binary @./image.jpg -o ./blurred.j
 With the following script, Neh get's some random bits and returns them as a response
 ```bash
 #!/bin/bash
-dd if=/dev/urandom bs=1K count=1
+dd if=/dev/urandom bs=1K count=1 2>/dev/null
 ```
 
 Or if you want a random (md5) hash:
 ```bash
-dd if=/dev/urandom bs=1K count=1 | md5sum | cut -d ' ' -f1
+dd if=/dev/urandom bs=1K count=1 2>/dev/null | md5sum | cut -d ' ' -f1
 ```
 
 ### Return a webpage rendered by Ruby
