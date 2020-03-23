@@ -4,3 +4,6 @@ sudo mkdir -p /usr/lib/neh
 sudo curl -sL \
     https://raw.githubusercontent.com/oap-bram/neh/master/neh.lua \
     -o /usr/lib/neh/neh.lua
+sudo curl -sL \
+    https://raw.githubusercontent.com/oap-bram/neh/master/LICENSE \
+    -o /usr/lib/neh/LICENSE
