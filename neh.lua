@@ -245,6 +245,8 @@ function awaitOutput(run_child, program_read, command_read)
 
         ngx.sleep(.005)
     end
+
+    socket:send('0\r\n\r\n')
 end
 
 local ok = ngx.on_abort(onAbort)
