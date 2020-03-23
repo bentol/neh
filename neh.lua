@@ -127,28 +127,52 @@ function runProgram(read, program_write, header_write, command_write)
 end
 
 function awaitHeaders(header_read)
-    posix.fcntl(header_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
+    local reading_headers = true
+    while(reading_headers) do
+        local incoming_header, err = unistd.read(header_read, 1)
+        local headers = {}
+        local header = incoming_header
 
-    local buffer = ''
-    while(true) do
-        ngx.sleep(.01)
-        if ngx.headers_sent then break end
-        local out, read_err = unistd.read(header_read, 1)
-        if out ~= nil then
-            if out:byte() == 10 then
-                local data = split(buffer, ':')
+        if ngx.headers_sent then
+            reading_headers = false
+            break
+        end
+
+        if header ~= nil then
+            while(true) do
+                ::continue_header_read::
+                if ngx.headers_sent then
+                    reading_headers = false
+                    break
+                end
+
+                local char = unistd.read(header_read, 1)
+
+                if char == nil or char == '' then break end
+                if char:byte() == 10 then
+                    table.insert(headers, header)
+                    header = ''
+                    goto continue_header_read
+                end
+
+                header = header .. char
+            end
+
+            for _, header in ipairs(headers) do
+                local data = split(header, ':')
                 local header = trim(data[1])
                 local value = trim(data[2])
 
-                if ngx.headers_sent then break end
+                if ngx.headers_sent then
+                    reading_headers = false
+                    break
+                end
                 ngx.header[header] = value
                 buffer = ''
-            else
-                buffer = buffer .. out
             end
-        else
-            ngx.sleep(.1)
         end
+
+        ngx.sleep(.01)
     end
 end
 
@@ -172,7 +196,6 @@ function awaitOutput(run_child, program_read, command_read)
                 ngx.flush(true)
 
                 socket, err = ngx.req.socket(true)
-                print(err)
 
                 if socket == nil then
                     ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
