@@ -121,10 +121,24 @@ Do you have some cool implementations? Please share them with me by sending me a
 For debugging you can tail your nginx `error.log` usually found at `/var/log/nginx/error.log`.
 If you want to debug `/usr/lib/neh/neh.lua` use the included print version and/or take a look at the [openresty docs](https://github.com/openresty/lua-nginx-module).
 
+## Contributing
+
+Feel free to open a pull request or an issue if you want!
+If this gets out of hand I'll setup some structure using GitHub.
+
+## TODO
+
+* Comprehensive documentation
+* Unit testing to guarantee quality
+* Actual testing from developers/users for feedback
+* Friendly error messages in logs and in responses
+* Production guarantees
+
+I could use all the help you can throw at me, so if you can help with the above let me know!
+
 ## License
 
 See the [LICENSE](/LICENSE) for more details.
-
 
 ---
 <sup>Sheep by MHD AZMI DWIPRANATA from the Noun Project</sup>
