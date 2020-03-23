@@ -127,6 +127,8 @@ function runProgram(read, program_write, header_write, command_write)
 end
 
 function awaitHeaders(header_read)
+    posix.fcntl(header_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
+
     local reading_headers = true
     while(reading_headers) do
         local incoming_header, err = unistd.read(header_read, 1)
@@ -134,7 +136,6 @@ function awaitHeaders(header_read)
         local header = incoming_header
 
         if ngx.headers_sent then
-            reading_headers = false
             break
         end
 
@@ -172,13 +173,17 @@ function awaitHeaders(header_read)
             end
         end
 
+        if ngx.headers_sent then
+            break
+        end
+
         ngx.sleep(.01)
     end
 end
 
 function awaitOutput(run_child, program_read, command_read)
-    posix.fcntl(command_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
     posix.fcntl(program_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
+    posix.fcntl(command_read, fcntl.F_SETFL, bitoper(0, fcntl.O_NONBLOCK, OR))
 
     ngx.header['Server'] = 'Neh alphav1'
     ngx.header['Content-Type'] = 'text/plain'
@@ -189,8 +194,12 @@ function awaitOutput(run_child, program_read, command_read)
     while(doing_output) do
         local out = unistd.read(program_read, 1024)
         local incoming_command = unistd.read(command_read, 1)
-
+ 
         if out ~= nil then
+            if out:byte() == nil then
+                break
+            end
+
             if socket == nil then
                 ngx.send_headers()
                 ngx.flush(true)
@@ -199,6 +208,7 @@ function awaitOutput(run_child, program_read, command_read)
 
                 if socket == nil then
                     ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+                    break
                 end
             end
 
@@ -213,7 +223,6 @@ function awaitOutput(run_child, program_read, command_read)
             local command = incoming_command
             while(true) do
                 ::continue_command_read::
-
                 local char = unistd.read(command_read, 1)
 
                 if char == nil then break end
@@ -234,7 +243,7 @@ function awaitOutput(run_child, program_read, command_read)
             end
         end
 
-        ngx.sleep(.01)
+        ngx.sleep(.005)
     end
 end
 
